@@ -10,7 +10,7 @@
   .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
 
   /* Header */
-  header { background: linear-gradient(135deg, #2c3e50, #3498db); color: white; padding: 32px; border-radius: 12px; margin-bottom: 24px; }
+  header { background: linear-gradient(135deg, #2c3e50, #3498db); color: white; padding: 32px; border-radius: 12px; margin-bottom: 24px; position: relative; }
   header h1 { font-size: 1.6em; margin-bottom: 8px; }
   header p { opacity: 0.85; font-size: 0.9em; }
 
@@ -72,6 +72,10 @@
   .hidden-row { display: none; }
   .filter-info { font-size: 0.82em; color: #95a5a6; margin-left: auto; white-space: nowrap; }
 
+  /* Reset button */
+  .reset-btn { position: absolute; top: 32px; right: 24px; background: none; border: 1px solid rgba(255,255,255,0.5); color: white; padding: 6px 14px; border-radius: 6px; font-size: 0.82em; cursor: pointer; transition: all 0.15s; text-decoration: none; }
+  .reset-btn:hover { background: rgba(255,255,255,0.15); border-color: white; }
+
   /* Report meta */
   .report-meta { background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 16px 20px; margin-bottom: 20px; }
   .report-meta .meta-row { display: flex; gap: 24px; flex-wrap: wrap; font-size: 0.9em; color: #555; }
@@ -84,9 +88,10 @@
   <header>
     <h1>SAP SuccessFactors Permission Comparer</h1>
     <p>Upload T3 (Pre-Production) and PROD (Production) permission PDFs to compare them client-side.</p>
+    <button class="reset-btn" id="resetBtn" style="display:none;" onclick="window.resetUI()">Reset</button>
   </header>
 
-  <div class="upload-container">
+  <div class="upload-container" id="uploadContainer">
     <div class="upload-box" id="t3Box">
       <div class="upload-icon">&#128196;</div>
       <h3>T3 (Pre-Production)</h3>
@@ -103,7 +108,7 @@
     </div>
   </div>
 
-  <div class="actions">
+  <div class="actions" id="actionsContainer">
     <button id="compareBtn" disabled>Compare Permissions</button>
   </div>
 
@@ -715,6 +720,10 @@ async function runComparison() {
     reportEl.innerHTML = reportHtml;
 
     setProgress('');
+    // Hide upload UI, show reset
+    document.getElementById('uploadContainer').style.display = 'none';
+    document.getElementById('actionsContainer').style.display = 'none';
+    document.getElementById('resetBtn').style.display = '';
     attachFilterLogic();
   } catch (err) {
     setProgress('');
@@ -805,6 +814,25 @@ window.clearFilter = function() {
   document.getElementById('filterInput').value = '';
   document.querySelectorAll('.filter-btn[data-filter]').forEach(b => b.classList.remove('active'));
   window.applyFilter();
+};
+
+window.resetUI = function() {
+  // Show upload UI, hide reset
+  document.getElementById('uploadContainer').style.display = '';
+  document.getElementById('actionsContainer').style.display = '';
+  document.getElementById('resetBtn').style.display = 'none';
+  // Clear report
+  document.getElementById('report').innerHTML = '';
+  // Reset file state
+  t3File = null;
+  prodFile = null;
+  document.getElementById('t3Input').value = '';
+  document.getElementById('prodInput').value = '';
+  document.getElementById('t3Name').textContent = '';
+  document.getElementById('prodName').textContent = '';
+  document.getElementById('t3Box').classList.remove('has-file');
+  document.getElementById('prodBox').classList.remove('has-file');
+  document.getElementById('compareBtn').disabled = true;
 };
 </script>
 </body>
