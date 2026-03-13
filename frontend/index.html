@@ -191,16 +191,24 @@
     </div>
     <div class="tool-section-body">
 
-      <div class="upload-row">
-        <div class="upload-field">
-          <label>Role PDF export</label>
+      <div class="upload-container" id="pxUploadContainer">
+        <div class="upload-box" id="pxPdfBox">
+          <div class="upload-icon">&#128196;</div>
+          <h3>Role PDF Export</h3>
+          <p>Drop PDF here or click to browse</p>
+          <div class="filename" id="pxPdfName"></div>
           <input type="file" id="pxPdfInput" accept=".pdf">
         </div>
-        <div class="upload-field">
-          <label>Excel workbook (.xlsx)</label>
+        <div class="upload-box" id="pxExcelBox">
+          <div class="upload-icon">&#128202;</div>
+          <h3>Excel Workbook (.xlsx)</h3>
+          <p>Drop Excel file here or click to browse</p>
+          <div class="filename" id="pxExcelName"></div>
           <input type="file" id="pxExcelInput" accept=".xlsx,.xls">
         </div>
-        <button class="tool-btn" id="pxCompareBtn" disabled onclick="runPdfExcelCompare()">Compare</button>
+      </div>
+      <div class="actions">
+        <button class="tool-btn" id="pxCompareBtn" disabled onclick="runPdfExcelCompare()">Compare PDF vs Excel</button>
       </div>
       <div class="tool-status" id="pxStatus"></div>
       <div id="pxReport"></div>
@@ -218,11 +226,16 @@
     </div>
     <div class="tool-section-body">
 
-      <div class="upload-row">
-        <div class="upload-field">
-          <label>Role PDF export</label>
+      <div class="upload-container" id="genUploadContainer" style="grid-template-columns: 1fr;">
+        <div class="upload-box" id="genPdfBox">
+          <div class="upload-icon">&#128196;</div>
+          <h3>Role PDF Export</h3>
+          <p>Drop PDF here or click to browse</p>
+          <div class="filename" id="genPdfName"></div>
           <input type="file" id="genPdfInput" accept=".pdf">
         </div>
+      </div>
+      <div class="actions">
         <button class="tool-btn green" id="genExcelBtn" disabled onclick="runGenExcel()">Generate &amp; Download Excel</button>
       </div>
       <div class="tool-status" id="genStatus"></div>
@@ -259,13 +272,19 @@ function setupUploadBox(boxId, inputId, nameId, setter) {
     e.preventDefault();
     box.classList.remove('dragover');
     var file = e.dataTransfer.files[0];
-    if (file && file.type === 'application/pdf') {
-      setter(file);
-      nameEl.textContent = file.name;
-      box.classList.add('has-file');
-      var dt = new DataTransfer();
-      dt.items.add(file);
-      input.files = dt.files;
+    if (file) {
+      var accept = input.getAttribute('accept') || '';
+      var validType = !accept || accept.split(',').some(function(ext) {
+        return file.name.toLowerCase().endsWith(ext.trim());
+      });
+      if (validType) {
+        setter(file);
+        nameEl.textContent = file.name;
+        box.classList.add('has-file');
+        var dt = new DataTransfer();
+        dt.items.add(file);
+        input.files = dt.files;
+      }
     }
   });
 }
@@ -574,15 +593,8 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
     document.getElementById('pxCompareBtn').disabled = !(pxPdfFile && pxExcelFile);
   }
 
-  document.getElementById('pxPdfInput').addEventListener('change', function() {
-    pxPdfFile = this.files[0] || null;
-    pxUpdateBtn();
-  });
-
-  document.getElementById('pxExcelInput').addEventListener('change', function() {
-    pxExcelFile = this.files[0] || null;
-    pxUpdateBtn();
-  });
+  setupUploadBox('pxPdfBox', 'pxPdfInput', 'pxPdfName', function(f) { pxPdfFile = f; pxUpdateBtn(); });
+  setupUploadBox('pxExcelBox', 'pxExcelInput', 'pxExcelName', function(f) { pxExcelFile = f; pxUpdateBtn(); });
 
   window.runPdfExcelCompare = function() {
     var btn = document.getElementById('pxCompareBtn');
@@ -730,8 +742,8 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
 (function() {
   var genPdfFile = null;
 
-  document.getElementById('genPdfInput').addEventListener('change', function() {
-    genPdfFile = this.files[0] || null;
+  setupUploadBox('genPdfBox', 'genPdfInput', 'genPdfName', function(f) {
+    genPdfFile = f;
     document.getElementById('genExcelBtn').disabled = !genPdfFile;
   });
 
