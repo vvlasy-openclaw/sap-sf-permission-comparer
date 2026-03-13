@@ -792,7 +792,8 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
         'In Excel — Not Found in PDF <span class="count-badge">' + data.onlyInExcel.length + '</span></div>' +
         '<div class="result-panel-body">' +
         '<div style="padding:12px 14px;border-bottom:1px solid #eee;">' +
-        '<button class="tool-btn" style="font-size:0.82em;padding:8px 18px;" onclick="downloadModifiedExcel()">Set all to None &amp; Download Excel</button>' +
+        '<button id="setNoneBtn" class="tool-btn" style="font-size:0.82em;padding:8px 18px;" onclick="downloadModifiedExcel()">Set all to None &amp; Download Excel</button>' +
+        '<span id="setNoneProgress" style="margin-left:10px;font-size:0.82em;color:#666;"></span>' +
         '</div>' +
         '<table>' +
         '<tr><th>#</th><th>Element</th><th>Grouping</th><th>Permission</th><th>Excel Value</th><th>Row</th></tr>';
@@ -871,13 +872,17 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
     var rows = pxLastData.onlyInExcel.map(function(e) { return e.row; }).filter(Boolean);
     if (!rows.length) return;
 
+    var btn = document.getElementById('setNoneBtn');
+    var progress = document.getElementById('setNoneProgress');
+    btn.disabled = true;
+    btn.style.opacity = '0.5';
+    btn.style.cursor = 'not-allowed';
+    progress.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;vertical-align:middle;display:inline-block;"></span> Modifying Excel...';
+
     var formData = new FormData();
     formData.append('excel', pxExcelFile);
     formData.append('rows', rows.join(','));
     formData.append('role_column', pxLastData.roleColumn);
-
-    var statusEl = document.getElementById('pxStatus');
-    statusEl.innerHTML = '<span class="spinner"></span> Modifying Excel...';
 
     fetch('/api/modify-excel', { method: 'POST', body: formData })
       .then(function(r) {
@@ -888,7 +893,10 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
         return r.blob().then(function(blob) { return { blob: blob, filename: filename }; });
       })
       .then(function(result) {
-        statusEl.innerHTML = '';
+        progress.innerHTML = '<span style="color:#27ae60;">✓ Done</span>';
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
         var url = URL.createObjectURL(result.blob);
         var a = document.createElement('a');
         a.href = url;
@@ -896,9 +904,13 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
         document.body.appendChild(a);
         a.click();
         setTimeout(function() { URL.revokeObjectURL(url); a.remove(); }, 2000);
+        setTimeout(function() { progress.innerHTML = ''; }, 3000);
       })
       .catch(function(err) {
-        statusEl.innerHTML = '<span style="color:#e74c3c;"><strong>Error:</strong> ' + htmlEscape(err.message) + '</span>';
+        progress.innerHTML = '<span style="color:#e74c3c;">✗ ' + htmlEscape(err.message) + '</span>';
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
       });
   };
 })();
