@@ -19,7 +19,8 @@
   .reset-btn:hover { background: rgba(255,255,255,0.15); border-color: white; }
 
   /* Tool cards grid */
-  .tool-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 24px; }
+  .tool-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 24px; max-height: 500px; opacity: 1; overflow: hidden; transition: max-height 0.35s ease, opacity 0.25s ease, margin-bottom 0.35s ease; }
+  .tool-cards.hidden { max-height: 0; opacity: 0; margin-bottom: 0; pointer-events: none; }
   @media (max-width: 800px) { .tool-cards { grid-template-columns: 1fr; } }
 
   .tool-card {
@@ -82,7 +83,8 @@
     padding-bottom: 16px;
     border-bottom: 2px solid #f0f2f5;
   }
-  .tool-panel-header h2 { font-size: 1.15em; color: #2c3e50; }
+  .tool-panel-header h2 { font-size: 1.15em; color: #2c3e50; display: flex; align-items: center; gap: 10px; }
+  .tool-panel-header h2 .panel-icon { font-size: 1.4em; }
   .tool-panel-header p { font-size: 0.85em; color: #7f8c8d; margin-top: 2px; }
   .panel-close {
     background: none; border: 1px solid #ddd; border-radius: 6px;
@@ -218,7 +220,7 @@
   <div class="tool-panel" id="panel-t3prod">
     <div class="tool-panel-header">
       <div>
-        <h2>Compare T3 vs PROD PDFs</h2>
+        <h2><span class="panel-icon">&#128203;</span>Compare T3 vs PROD PDFs</h2>
         <p>Upload T3 (Pre-Production) and PROD (Production) permission PDFs to compare them server-side.</p>
       </div>
       <button class="panel-close" onclick="collapseAll()">Close</button>
@@ -253,7 +255,7 @@
   <div class="tool-panel" id="panel-pdfexcel">
     <div class="tool-panel-header">
       <div>
-        <h2>Compare PDF vs Excel Workbook</h2>
+        <h2><span class="panel-icon">&#128202;</span>Compare PDF vs Excel Workbook</h2>
         <p>Upload a SAP SF role PDF export and the Role Based Permission Excel workbook to see what differs. The role is auto-detected from the PDF filename.</p>
       </div>
       <button class="panel-close" onclick="collapseAll()">Close</button>
@@ -286,7 +288,7 @@
   <div class="tool-panel" id="panel-genexcel">
     <div class="tool-panel-header">
       <div>
-        <h2>Generate Excel from PDF</h2>
+        <h2><span class="panel-icon">&#128229;</span>Generate Excel from PDF</h2>
         <p>Upload a SAP SF role PDF export and download an Excel file with all extracted permissions, formatted with section headers and auto-filter.</p>
       </div>
       <button class="panel-close" onclick="collapseAll()">Close</button>
@@ -318,29 +320,26 @@
 var currentSection = null;
 
 function toggleSection(name) {
-  var cards = document.querySelectorAll('.tool-card');
+  var cardsContainer = document.getElementById('toolCards');
   var panels = document.querySelectorAll('.tool-panel');
 
   if (currentSection === name) {
-    // Collapse current
     collapseAll();
     return;
   }
 
-  // Collapse all first
+  // Collapse all panels first
   panels.forEach(function(p) { p.classList.remove('expanded'); });
-  cards.forEach(function(c) { c.classList.remove('active'); });
 
-  // Expand selected
+  // Hide cards with animation
+  cardsContainer.classList.add('hidden');
+
+  // Expand selected panel
   var panelId = 'panel-' + name;
   var panel = document.getElementById(panelId);
   if (panel) {
     panel.classList.add('expanded');
-    // Mark the corresponding card as active
-    var idx = name === 't3prod' ? 0 : name === 'pdfexcel' ? 1 : 2;
-    cards[idx].classList.add('active');
     currentSection = name;
-    // Smooth scroll to panel
     setTimeout(function() {
       panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }, 100);
@@ -349,7 +348,7 @@ function toggleSection(name) {
 
 function collapseAll() {
   document.querySelectorAll('.tool-panel').forEach(function(p) { p.classList.remove('expanded'); });
-  document.querySelectorAll('.tool-card').forEach(function(c) { c.classList.remove('active'); });
+  document.getElementById('toolCards').classList.remove('hidden');
   currentSection = null;
 }
 
