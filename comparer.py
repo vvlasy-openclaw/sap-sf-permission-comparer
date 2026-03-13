@@ -213,8 +213,11 @@ def parse_sections(text: str, element_headers=None) -> OrderedDict:
 
     for idx, stripped in enumerate(lines):
 
-        # Stop parsing once we hit the "Assignments" section
+        # Stop parsing once we hit the "Assignments" section (after Metadata Framework)
+        # Also stop at "ID:" lines that precede the Assignments heading
         if stripped.lower().startswith("assignments"):
+            break
+        if current_section == "Metadata Framework" and stripped.startswith("ID:"):
             break
 
         # Check if this line is a known top-level section header
