@@ -8,7 +8,7 @@ Description:
     parses the permission entries, and identifies any differences between them.
 
 Requirements:
-    pip install PyMuPDF
+    pip install pdfplumber
 
 Usage:
     1. Place both PDF files in the same directory as this script (or update paths).
@@ -20,7 +20,7 @@ Date:    2025
 ==============================================================================
 """
 
-import fitz  # PyMuPDF
+import pdfplumber
 import re
 import os
 import sys
@@ -68,7 +68,7 @@ def find_pdf_pairs():
 # ============================================================================
 def extract_text_from_pdf(pdf_path: str) -> str:
     """
-    Extract all text content from a PDF file using PyMuPDF.
+    Extract all text content from a PDF file using pdfplumber.
     Filters out page-break noise (URLs, page headers/footers).
 
     Args:
@@ -82,9 +82,9 @@ def extract_text_from_pdf(pdf_path: str) -> str:
         sys.exit(1)
 
     full_text = []
-    with fitz.open(pdf_path) as doc:
-        for page_num, page in enumerate(doc, start=1):
-            text = page.get_text()
+    with pdfplumber.open(pdf_path) as pdf:
+        for page_num, page in enumerate(pdf.pages, start=1):
+            text = page.extract_text()
             if text:
                 full_text.append(text)
             else:

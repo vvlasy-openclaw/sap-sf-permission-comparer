@@ -51,7 +51,7 @@ async def compare(t3: UploadFile = File(...), prod: UploadFile = File(...)):
     Accept two PDF uploads (t3 and prod), run the comparison pipeline,
     and return the structured differences and raw diff as JSON.
     """
-    # Write uploads to temp files (PyMuPDF needs file paths)
+    # Write uploads to temp files (pdfplumber needs file paths)
     t3_tmp = None
     prod_tmp = None
     try:
