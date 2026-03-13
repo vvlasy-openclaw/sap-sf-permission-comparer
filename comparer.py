@@ -402,12 +402,18 @@ def parse_permission_lines(lines: list) -> OrderedDict:
         # like (TER_ENDTC) from normal parentheticals like (All) or (Employee)
         id_match = re.search(r'\(([A-Za-z0-9\-]*_[A-Za-z0-9_\-]*)\)\s*$', line_no_prefix)
         if (id_match and not _has_perm_syntax(stripped) and last_name is not None):
-            suffix = line_no_prefix.strip()
-            prev_perms = permissions.pop(last_name)
-            new_name = f"{last_name} {suffix}"
-            permissions[new_name] = prev_perms
-            last_name = new_name
-            continue
+            # Only merge as continuation if the previous entry doesn't already
+            # have real permissions (View, Edit, etc.).  If it does, this line
+            # is a new entry that happens to contain an ID — not a continuation.
+            prev_perms = permissions.get(last_name, set())
+            real_perms = prev_perms - {"Enabled"}
+            if not real_perms:
+                suffix = line_no_prefix.strip()
+                prev_perms = permissions.pop(last_name)
+                new_name = f"{last_name} {suffix}"
+                permissions[new_name] = prev_perms
+                last_name = new_name
+                continue
 
         name, granted = extract_name_and_perms(stripped)
 
