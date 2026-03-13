@@ -211,7 +211,14 @@ def parse_sections(text: str, element_headers=None) -> OrderedDict:
 
     lines = [l.strip() for l in raw_lines if l.strip()]
 
+    # Track lines to skip (role metadata block that appears mid-page)
+    skip_until = -1
+
     for idx, stripped in enumerate(lines):
+
+        # Skip lines that are part of the role metadata block
+        if idx <= skip_until:
+            continue
 
         # Stop parsing once we hit the "Assignments" section (after Metadata Framework)
         # Also stop at "ID:" lines that precede the Assignments heading
@@ -220,12 +227,44 @@ def parse_sections(text: str, element_headers=None) -> OrderedDict:
         if current_section == "Metadata Framework" and stripped.startswith("ID:"):
             break
 
+        # Detect the role metadata block that appears mid-page after "Permissions"
+        # Pattern: "User Type:" followed by metadata lines, ending after the
+        # role description. This block should NOT change section context.
+        if stripped == "User Type:" or stripped.startswith("User Type:"):
+            # Scan ahead to find the end of the metadata block
+            # The block ends after the "View <role_name>..." line or the
+            # description line, whichever comes last
+            scan = idx + 1
+            while scan < len(lines):
+                scan_line = lines[scan].strip()
+                # The block ends when we see a line that looks like a permission
+                # field (followed by "View Current" etc.) or a known subsection
+                if scan_line.startswith("View Current") or scan_line.startswith("View History"):
+                    # The previous line was the first real field - back up
+                    skip_until = scan - 2  # skip up to but not including the field name
+                    break
+                # Also check if the line contains standard permission keywords
+                # that indicate real content has resumed
+                if any(kw in scan_line for kw in ["View Current", "View History", "View |", "Edit |"]):
+                    skip_until = scan - 2
+                    break
+                scan += 1
+            else:
+                skip_until = scan
+            continue
+
         # Check if this line is a known top-level section header
         matched_section = None
         for header in SECTION_HEADERS:
             if stripped.lower().startswith(header.lower()):
                 matched_section = header
                 break
+
+        # Skip metadata-only headers that shouldn't create sections
+        if matched_section in ("Last Modified By", "Last Modified Date",
+                               "User Type", "RBP-Only"):
+            # These are role metadata, not permission sections - skip them
+            continue
 
         if matched_section:
             current_section = matched_section
