@@ -21,7 +21,7 @@
   /* Tool cards grid */
   .tool-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 24px; max-height: 500px; opacity: 1; overflow: hidden; transition: max-height 0.35s ease, opacity 0.25s ease, margin-bottom 0.35s ease; }
   .tool-cards.hidden { max-height: 0; opacity: 0; margin-bottom: 0; pointer-events: none; }
-  @media (max-width: 800px) { .tool-cards { grid-template-columns: 1fr; } }
+  @media (max-width: 800px) { .tool-cards { grid-template-columns: 1fr; max-height: 800px; } }
 
   .tool-card {
     background: white;
@@ -350,6 +350,45 @@ function collapseAll() {
   document.querySelectorAll('.tool-panel').forEach(function(p) { p.classList.remove('expanded'); });
   document.getElementById('toolCards').classList.remove('hidden');
   currentSection = null;
+  resetAllSections();
+}
+
+function resetAllSections() {
+  // Reset section 1 (T3 vs PROD)
+  t3File = null;
+  prodFile = null;
+  document.getElementById('t3Input').value = '';
+  document.getElementById('prodInput').value = '';
+  document.getElementById('t3Name').textContent = '';
+  document.getElementById('prodName').textContent = '';
+  document.getElementById('t3Box').classList.remove('has-file');
+  document.getElementById('prodBox').classList.remove('has-file');
+  document.getElementById('compareBtn').disabled = true;
+  document.getElementById('progress').innerHTML = '';
+  document.getElementById('report').innerHTML = '';
+  document.getElementById('uploadContainer').style.display = '';
+  document.getElementById('actionsContainer').style.display = '';
+  document.getElementById('resetBtn').style.display = 'none';
+
+  // Reset section 2 (PDF vs Excel)
+  document.getElementById('pxPdfInput').value = '';
+  document.getElementById('pxExcelInput').value = '';
+  document.getElementById('pxPdfName').textContent = '';
+  document.getElementById('pxExcelName').textContent = '';
+  document.getElementById('pxPdfBox').classList.remove('has-file');
+  document.getElementById('pxExcelBox').classList.remove('has-file');
+  document.getElementById('pxCompareBtn').disabled = true;
+  document.getElementById('pxStatus').innerHTML = '';
+  document.getElementById('pxReport').innerHTML = '';
+  if (window._resetPxFiles) window._resetPxFiles();
+
+  // Reset section 3 (Generate Excel)
+  document.getElementById('genPdfInput').value = '';
+  document.getElementById('genPdfName').textContent = '';
+  document.getElementById('genPdfBox').classList.remove('has-file');
+  document.getElementById('genExcelBtn').disabled = true;
+  document.getElementById('genStatus').innerHTML = '';
+  if (window._resetGenFiles) window._resetGenFiles();
 }
 
 // ============================================================================
@@ -695,6 +734,8 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
 (function() {
   var pxPdfFile = null, pxExcelFile = null, pxLastData = null;
 
+  window._resetPxFiles = function() { pxPdfFile = null; pxExcelFile = null; pxLastData = null; };
+
   function pxUpdateBtn() {
     document.getElementById('pxCompareBtn').disabled = !(pxPdfFile && pxExcelFile);
   }
@@ -920,6 +961,8 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
 // ============================================================================
 (function() {
   var genPdfFile = null;
+
+  window._resetGenFiles = function() { genPdfFile = null; };
 
   setupUploadBox('genPdfBox', 'genPdfInput', 'genPdfName', function(f) {
     genPdfFile = f;
