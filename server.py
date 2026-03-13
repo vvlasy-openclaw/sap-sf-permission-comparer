@@ -1,23 +1,35 @@
 """
 FastAPI server for SAP SF Permission Comparer.
 
-Serves the frontend and provides an API endpoint for comparing
-T3 vs PROD permission PDFs using the logic from comparer.py.
+Serves the frontend and provides API endpoints for:
+  - Comparing T3 vs PROD permission PDFs
+  - Comparing a PDF role export against an Excel workbook
+  - Generating an Excel file from a PDF permission export
 """
 
+import io
 import os
 import tempfile
 
-from fastapi import FastAPI, File, UploadFile
+import openpyxl
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from comparer import (
-    extract_text_from_pdf,
-    parse_sections,
     compare_permissions,
     compare_raw_lines,
+    extract_pdf_structured,
+    extract_text_from_pdf,
     parse_permission_lines,
+    parse_sections,
+)
+from compare_pdf_vs_excel import (
+    build_excel_lookup,
+    compare_pdf_vs_excel,
+    extract_excel_permissions,
+    extract_pdf_permissions,
+    generate_pdf_excel,
 )
 
 app = FastAPI(title="SAP SF Permission Comparer")
@@ -102,3 +114,204 @@ async def compare(t3: UploadFile = File(...), prod: UploadFile = File(...)):
             os.unlink(t3_tmp.name)
         if prod_tmp and os.path.exists(prod_tmp.name):
             os.unlink(prod_tmp.name)
+
+
+@app.post("/api/compare-pdf-excel")
+async def compare_pdf_excel(pdf: UploadFile = File(...), excel: UploadFile = File(...)):
+    """
+    Accept a PDF role export and an Excel workbook, compare permissions,
+    and return a structured JSON report.
+
+    The role name is detected from the PDF filename and used to locate
+    the matching column in the "ROLE ACCESS (WHAT)" Excel sheet.
+    """
+    pdf_tmp = None
+    excel_tmp = None
+    try:
+        # Write uploads to temp files
+        pdf_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        pdf_tmp.write(await pdf.read())
+        pdf_tmp.close()
+
+        excel_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+        excel_tmp.write(await excel.read())
+        excel_tmp.close()
+
+        # Extract PDF permissions
+        try:
+            pdf_entries = extract_pdf_permissions(pdf_tmp.name)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"PDF parsing error: {exc}") from exc
+
+        if not pdf_entries:
+            raise HTTPException(status_code=422, detail="No permission entries found in PDF.")
+
+        # Detect role name from PDF filename (e.g. "View Role for ALL_MGR_GL_Manager NEW.pdf")
+        pdf_basename = os.path.splitext(pdf.filename or "")[0]
+        role_name = None
+        import re as _re
+        # Try "View Role for <role_name>" pattern
+        m = _re.search(r'View Role for\s+(.+)', pdf_basename, _re.IGNORECASE)
+        if m:
+            role_name = m.group(1).strip()
+        # Fall back to the full basename
+        if not role_name:
+            role_name = pdf_basename.strip()
+
+        EXCEL_SHEET = "ROLE ACCESS (WHAT)"
+
+        # Open Excel and find the column matching the role name
+        try:
+            wb = openpyxl.load_workbook(excel_tmp.name, data_only=True)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Excel open error: {exc}") from exc
+
+        if EXCEL_SHEET not in wb.sheetnames:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Sheet '{EXCEL_SHEET}' not found in Excel workbook. "
+                       f"Available sheets: {wb.sheetnames}",
+            )
+
+        ws = wb[EXCEL_SHEET]
+        # Scan header rows (rows 1-3) to find the role column
+        role_col = None
+        role_name_norm = role_name.lower().strip()
+        for header_row in range(1, 4):
+            for col in range(1, ws.max_column + 1):
+                cell_val = ws.cell(row=header_row, column=col).value
+                if cell_val and role_name_norm in str(cell_val).lower().strip():
+                    role_col = col
+                    break
+            if role_col:
+                break
+        wb.close()
+
+        if role_col is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Role '{role_name}' not found in header rows of sheet '{EXCEL_SHEET}'. "
+                       "Make sure the PDF filename contains the exact role name as it appears "
+                       "in the Excel column header.",
+            )
+
+        # Extract Excel permissions using the detected column
+        try:
+            excel_entries = extract_excel_permissions(excel_tmp.name, EXCEL_SHEET, role_col)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Excel parsing error: {exc}") from exc
+
+        # Compare
+        missing_in_excel, missing_in_pdf, mismatches, matched = compare_pdf_vs_excel(
+            pdf_entries, excel_entries
+        )
+
+        def _fmt_pdf_entry(e):
+            return {
+                "section": e.get("element") or e.get("section", ""),
+                "subsection": e.get("subsection", ""),
+                "field": e.get("field", ""),
+                "permissions": e.get("permissions_str", ""),
+                "excelRow": e.get("_excel_row"),
+                "excelHasField": e.get("_excel_has_field", False),
+                "excelValue": e.get("_excel_value"),
+            }
+
+        def _fmt_excel_entry(e):
+            return {
+                "element": e.get("element", ""),
+                "grouping": e.get("grouping", ""),
+                "permission": e.get("permission", ""),
+                "value": e.get("value", ""),
+                "row": e.get("row"),
+            }
+
+        truly_missing = [e for e in missing_in_excel if not e.get("_excel_has_field")]
+        has_field_none = [e for e in missing_in_excel if e.get("_excel_has_field")]
+
+        return {
+            "pdfFile": pdf.filename,
+            "excelFile": excel.filename,
+            "roleName": role_name,
+            "roleColumn": role_col,
+            "summary": {
+                "totalPdfPerms": len(pdf_entries),
+                "totalExcelPerms": len(excel_entries),
+                "matched": len(matched),
+                "onlyInPdf": len(truly_missing),
+                "excelFieldNone": len(has_field_none),
+                "onlyInExcel": len(missing_in_pdf),
+                "mismatches": len(mismatches),
+            },
+            "onlyInPdf": [_fmt_pdf_entry(e) for e in truly_missing],
+            "excelFieldNone": [_fmt_pdf_entry(e) for e in has_field_none],
+            "onlyInExcel": [_fmt_excel_entry(e) for e in missing_in_pdf],
+            "mismatches": [
+                {
+                    "section": (m["pdf"].get("element") or m["pdf"].get("section", "")),
+                    "subsection": m["pdf"].get("subsection", ""),
+                    "field": m["pdf"].get("field", ""),
+                    "pdfValue": m["pdf_value"],
+                    "excelValue": m["excel_value"],
+                    "excelRow": m["excel"].get("row"),
+                }
+                for m in mismatches
+            ],
+        }
+
+    finally:
+        if pdf_tmp and os.path.exists(pdf_tmp.name):
+            os.unlink(pdf_tmp.name)
+        if excel_tmp and os.path.exists(excel_tmp.name):
+            os.unlink(excel_tmp.name)
+
+
+@app.post("/api/pdf-to-excel")
+async def pdf_to_excel(pdf: UploadFile = File(...)):
+    """
+    Accept a PDF role export, extract all permissions, and return a
+    downloadable Excel (.xlsx) file with the permission data.
+    """
+    pdf_tmp = None
+    xlsx_tmp = None
+    try:
+        pdf_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        pdf_tmp.write(await pdf.read())
+        pdf_tmp.close()
+
+        try:
+            pdf_entries = extract_pdf_permissions(pdf_tmp.name)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"PDF parsing error: {exc}") from exc
+
+        if not pdf_entries:
+            raise HTTPException(status_code=422, detail="No permission entries found in PDF.")
+
+        # Generate Excel output
+        xlsx_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+        xlsx_tmp.close()
+
+        try:
+            generate_pdf_excel(pdf_entries, xlsx_tmp.name)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Excel generation error: {exc}") from exc
+
+        # Read into memory so we can clean up the temp file before returning
+        with open(xlsx_tmp.name, "rb") as fh:
+            xlsx_bytes = fh.read()
+
+        # Build a safe download filename from the PDF name
+        pdf_basename = os.path.splitext(pdf.filename or "permissions")[0]
+        download_name = pdf_basename + "_permissions.xlsx"
+
+        return StreamingResponse(
+            io.BytesIO(xlsx_bytes),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{download_name}"'},
+        )
+
+    finally:
+        if pdf_tmp and os.path.exists(pdf_tmp.name):
+            os.unlink(pdf_tmp.name)
+        if xlsx_tmp and os.path.exists(xlsx_tmp.name):
+            os.unlink(xlsx_tmp.name)

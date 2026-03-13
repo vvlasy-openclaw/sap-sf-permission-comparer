@@ -2,3 +2,4 @@ pymupdf
 fastapi
 uvicorn
 python-multipart
+openpyxl
