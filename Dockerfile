@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY server.py .
 COPY comparer.py .
+COPY compare_pdf_vs_excel.py .
 COPY frontend/ frontend/
 
 ARG BUILD_DATE=unknown
