@@ -277,6 +277,57 @@ async def compare_pdf_excel(pdf: UploadFile = File(...), excel: UploadFile = Fil
             os.unlink(excel_tmp.name)
 
 
+@app.post("/api/modify-excel")
+async def modify_excel(
+    excel: UploadFile = File(...),
+    rows: str = "",
+    role_column: int = 0,
+):
+    """
+    Accept an Excel workbook, a comma-separated list of row numbers, and a
+    role column index.  Set each specified cell to 'None' and return the
+    modified workbook as a download.
+    """
+    if not rows or not role_column:
+        raise HTTPException(status_code=400, detail="rows and role_column are required")
+
+    row_nums = [int(r) for r in rows.split(",") if r.strip().isdigit()]
+    if not row_nums:
+        raise HTTPException(status_code=400, detail="No valid row numbers provided")
+
+    excel_tmp = None
+    try:
+        excel_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+        excel_tmp.write(await excel.read())
+        excel_tmp.close()
+
+        wb = openpyxl.load_workbook(excel_tmp.name)
+        EXCEL_SHEET = "ROLE ACCESS (WHAT)"
+        if EXCEL_SHEET not in wb.sheetnames:
+            raise HTTPException(status_code=422, detail=f"Sheet '{EXCEL_SHEET}' not found")
+
+        ws = wb[EXCEL_SHEET]
+        for row_num in row_nums:
+            ws.cell(row=row_num, column=role_column).value = "None"
+
+        # Save to bytes
+        out = io.BytesIO()
+        wb.save(out)
+        wb.close()
+        out.seek(0)
+
+        download_name = os.path.splitext(excel.filename or "workbook")[0] + "_modified.xlsx"
+
+        return StreamingResponse(
+            out,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{download_name}"'},
+        )
+    finally:
+        if excel_tmp and os.path.exists(excel_tmp.name):
+            os.unlink(excel_tmp.name)
+
+
 @app.post("/api/pdf-to-excel")
 async def pdf_to_excel(pdf: UploadFile = File(...)):
     """

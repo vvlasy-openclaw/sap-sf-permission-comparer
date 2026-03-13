@@ -694,7 +694,7 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
 // Section 2: Compare PDF vs Excel
 // ============================================================================
 (function() {
-  var pxPdfFile = null, pxExcelFile = null;
+  var pxPdfFile = null, pxExcelFile = null, pxLastData = null;
 
   function pxUpdateBtn() {
     document.getElementById('pxCompareBtn').disabled = !(pxPdfFile && pxExcelFile);
@@ -723,6 +723,7 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
       })
       .then(function(data) {
         statusEl.innerHTML = '';
+        pxLastData = data;
         reportEl.innerHTML = renderPdfExcelReport(data);
         attachPanelToggle(reportEl);
       })
@@ -790,7 +791,11 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
       html += '<div class="result-panel collapsed">' +
         '<div class="result-panel-header" style="background:#3498db;" onclick="togglePanel(this)">' +
         'In Excel — Not Found in PDF <span class="count-badge">' + data.onlyInExcel.length + '</span></div>' +
-        '<div class="result-panel-body"><table>' +
+        '<div class="result-panel-body">' +
+        '<div style="padding:12px 14px;border-bottom:1px solid #eee;">' +
+        '<button class="tool-btn" style="font-size:0.82em;padding:8px 18px;" onclick="downloadModifiedExcel()">Set all to None &amp; Download Excel</button>' +
+        '</div>' +
+        '<table>' +
         '<tr><th>#</th><th>Element</th><th>Grouping</th><th>Permission</th><th>Excel Value</th><th>Row</th></tr>';
       for (var j = 0; j < data.onlyInExcel.length; j++) {
         var e = data.onlyInExcel[j];
@@ -860,6 +865,42 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
   window.togglePanel = function(header) {
     var panel = header.closest('.result-panel');
     if (panel) panel.classList.toggle('collapsed');
+  };
+
+  window.downloadModifiedExcel = function() {
+    if (!pxLastData || !pxExcelFile) return;
+    var rows = pxLastData.onlyInExcel.map(function(e) { return e.row; }).filter(Boolean);
+    if (!rows.length) return;
+
+    var formData = new FormData();
+    formData.append('excel', pxExcelFile);
+    formData.append('rows', rows.join(','));
+    formData.append('role_column', pxLastData.roleColumn);
+
+    var statusEl = document.getElementById('pxStatus');
+    statusEl.innerHTML = '<span class="spinner"></span> Modifying Excel...';
+
+    fetch('/api/modify-excel', { method: 'POST', body: formData })
+      .then(function(r) {
+        if (!r.ok) return r.text().then(function(t) { throw new Error('Server error (' + r.status + '): ' + t); });
+        var disposition = r.headers.get('Content-Disposition') || '';
+        var fnMatch = disposition.match(/filename="?([^"]+)"?/);
+        var filename = fnMatch ? fnMatch[1] : 'modified.xlsx';
+        return r.blob().then(function(blob) { return { blob: blob, filename: filename }; });
+      })
+      .then(function(result) {
+        statusEl.innerHTML = '';
+        var url = URL.createObjectURL(result.blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = result.filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function() { URL.revokeObjectURL(url); a.remove(); }, 2000);
+      })
+      .catch(function(err) {
+        statusEl.innerHTML = '<span style="color:#e74c3c;"><strong>Error:</strong> ' + htmlEscape(err.message) + '</span>';
+      });
   };
 })();
 
