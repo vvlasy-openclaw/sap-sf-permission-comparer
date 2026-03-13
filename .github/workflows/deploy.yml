@@ -44,6 +44,5 @@ jobs:
         run: |
           mkdir -p ~/.kube
           echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
-          chmod 600 ~/.kube/config
           kubectl set image deployment/sap-comparer sap-comparer=${{ env.IMAGE }}:sha-${{ github.sha }} -n openclaw-vvlasy
           kubectl rollout status deployment/sap-comparer -n openclaw-vvlasy --timeout=120s
