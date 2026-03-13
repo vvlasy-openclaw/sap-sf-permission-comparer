@@ -39,6 +39,12 @@ async def serve_frontend():
     return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
 
+@app.get("/api/info")
+async def info():
+    """Return build metadata."""
+    return {"buildDate": os.environ.get("BUILD_DATE", "unknown")}
+
+
 @app.post("/api/compare")
 async def compare(t3: UploadFile = File(...), prod: UploadFile = File(...)):
     """

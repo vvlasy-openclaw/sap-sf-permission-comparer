@@ -76,6 +76,9 @@
   .reset-btn { position: absolute; top: 32px; right: 24px; background: none; border: 1px solid rgba(255,255,255,0.5); color: white; padding: 6px 14px; border-radius: 6px; font-size: 0.82em; cursor: pointer; transition: all 0.15s; text-decoration: none; }
   .reset-btn:hover { background: rgba(255,255,255,0.15); border-color: white; }
 
+  /* Footer */
+  .build-footer { text-align: center; padding: 16px; font-size: 0.7em; color: #bdc3c7; }
+
   /* Report meta */
   .report-meta { background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 16px 20px; margin-bottom: 20px; }
   .report-meta .meta-row { display: flex; gap: 24px; flex-wrap: wrap; font-size: 0.9em; color: #555; }
@@ -115,6 +118,8 @@
   <div id="progress"></div>
   <div id="report"></div>
 </div>
+
+<footer class="build-footer" id="buildFooter"></footer>
 
 <script>
 // ============================================================================
@@ -438,6 +443,13 @@ function resetUI() {
   document.getElementById('prodBox').classList.remove('has-file');
   document.getElementById('compareBtn').disabled = true;
 }
+
+// Load build info
+fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
+  if (d.buildDate && d.buildDate !== 'unknown') {
+    document.getElementById('buildFooter').textContent = 'Built: ' + d.buildDate;
+  }
+}).catch(function() {});
 </script>
 </body>
 </html>
