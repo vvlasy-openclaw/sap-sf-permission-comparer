@@ -257,6 +257,17 @@ async def compare_pdf_excel(pdf: UploadFile = File(...), excel: UploadFile = Fil
                 }
                 for m in mismatches
             ],
+            "matched": [
+                {
+                    "section": (m["pdf"].get("element") or m["pdf"].get("section", "")),
+                    "subsection": m["pdf"].get("subsection", ""),
+                    "field": m["pdf"].get("field", ""),
+                    "pdfValue": m["pdf"].get("permissions_str", ""),
+                    "excelValue": m["excel"].get("value", ""),
+                    "excelRow": m["excel"].get("row"),
+                }
+                for m in matched
+            ],
         }
 
     finally:

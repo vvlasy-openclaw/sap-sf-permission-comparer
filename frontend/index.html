@@ -804,6 +804,26 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
       html += '</table></div></div>';
     }
 
+    // Matched panel (collapsed by default)
+    if (data.matched && data.matched.length) {
+      html += '<div class="result-panel collapsed">' +
+        '<div class="result-panel-header" style="background:#27ae60;" onclick="togglePanel(this)">' +
+        'Matched Values <span class="count-badge">' + data.matched.length + '</span></div>' +
+        '<div class="result-panel-body"><table>' +
+        '<tr><th>#</th><th>Section</th><th>Subsection</th><th>Field</th><th>PDF Value</th><th>Excel Value</th><th>Excel Row</th></tr>';
+      for (var mi = 0; mi < data.matched.length; mi++) {
+        var mt = data.matched[mi];
+        html += '<tr><td>' + (mi+1) + '</td>' +
+          '<td>' + htmlEscape(mt.section) + '</td>' +
+          '<td>' + htmlEscape(mt.subsection) + '</td>' +
+          '<td>' + htmlEscape(mt.field) + '</td>' +
+          '<td><span class="tag tag-excel">' + htmlEscape(mt.pdfValue) + '</span></td>' +
+          '<td><span class="tag tag-excel">' + htmlEscape(mt.excelValue) + '</span></td>' +
+          '<td>' + (mt.excelRow || '') + '</td></tr>';
+      }
+      html += '</table></div></div>';
+    }
+
     if (!data.mismatches.length && !data.onlyInPdf.length && !data.onlyInExcel.length && !data.excelFieldNone.length) {
       html += '<div class="identical">All permissions match between PDF and Excel.</div>';
     }
