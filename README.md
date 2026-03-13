@@ -1,6 +1,10 @@
-# SAP SF Permission Comparer
+<p align="center">
+  <img src="docs/icon.png" alt="SAP SF Permission Comparer" width="128">
+</p>
 
-A web tool for comparing SAP SuccessFactors role-based permissions across environments and formats.
+<h1 align="center">SAP SF Permission Comparer</h1>
+
+<p align="center">A web tool for comparing SAP SuccessFactors role-based permissions across environments and formats.</p>
 
 **Live:** [sap-comparer.openclaw.vvlasy.cz](https://sap-comparer.openclaw.vvlasy.cz)
 
