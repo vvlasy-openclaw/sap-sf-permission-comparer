@@ -85,9 +85,20 @@ def extract_text_from_pdf(pdf_path: str) -> str:
     doc = fitz.open(pdf_path)
     for page_num in range(len(doc)):
         page = doc[page_num]
-        text = page.get_text()
-        if text:
-            full_text.append(text)
+        blocks = page.get_text("blocks")
+        page_lines = []
+        for b in blocks:
+            # b = (x0, y0, x1, y1, text, block_no, block_type)
+            if b[-1] != 0:  # skip image blocks
+                continue
+            # Filter out page header area (y < 30) — contains repeated timestamps and titles
+            if b[1] < 30:
+                continue
+            text = b[4]
+            if text.strip():
+                page_lines.append(text)
+        if page_lines:
+            full_text.append("".join(page_lines))
         else:
             print(f"  [WARNING] No text extracted from page {page_num + 1} of {pdf_path}")
     doc.close()
@@ -102,7 +113,13 @@ def extract_text_from_pdf(pdf_path: str) -> str:
         if stripped.startswith("http://") or stripped.startswith("https://"):
             continue
         # Skip page header lines like "3/12/26, 2:19 PM View Role for ..."
-        if re.match(r'^\d+/\d+/\d+,\s+\d+:\d+\s+(AM|PM)\s+', stripped):
+        if re.match(r'^\d+/\d+/\d+,\s+\d+:\d+\s+(AM|PM)', stripped):
+            continue
+        # Skip "View Role for ..." title lines repeated on each page
+        if stripped.startswith("View Role for ") or stripped.startswith("View ALL_"):
+            continue
+        # Skip page number lines like "1/39", "18/26"
+        if re.match(r'^\d+/\d+$', stripped):
             continue
         cleaned.append(stripped)
 
