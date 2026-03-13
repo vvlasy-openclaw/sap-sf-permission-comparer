@@ -29,7 +29,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_TOKEN }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -46,3 +46,4 @@ jobs:
           echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
           kubectl set image deployment/sap-comparer sap-comparer=${{ env.IMAGE }}:sha-${{ github.sha }} -n openclaw-vvlasy
           kubectl rollout status deployment/sap-comparer -n openclaw-vvlasy --timeout=120s
+
