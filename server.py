@@ -12,7 +12,7 @@ import os
 import tempfile
 
 import openpyxl
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 
@@ -280,16 +280,14 @@ async def compare_pdf_excel(pdf: UploadFile = File(...), excel: UploadFile = Fil
 @app.post("/api/modify-excel")
 async def modify_excel(
     excel: UploadFile = File(...),
-    rows: str = "",
-    role_column: int = 0,
+    rows: str = Form(...),
+    role_column: int = Form(...),
 ):
     """
     Accept an Excel workbook, a comma-separated list of row numbers, and a
     role column index.  Set each specified cell to 'None' and return the
     modified workbook as a download.
     """
-    if not rows or not role_column:
-        raise HTTPException(status_code=400, detail="rows and role_column are required")
 
     row_nums = [int(r) for r in rows.split(",") if r.strip().isdigit()]
     if not row_nums:
