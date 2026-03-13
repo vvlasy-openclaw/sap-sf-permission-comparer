@@ -615,6 +615,10 @@ def extract_pdf_structured(pdf_path):
                 # Previous text has unbalanced parens
                 if prev_text.count("(") > prev_text.count(")"):
                     return True
+                # Previous text ends with " -" or " –" (line wrapped mid-name)
+                pt_stripped = prev_text.rstrip()
+                if pt_stripped.endswith("-") or pt_stripped.endswith("–") or pt_stripped.endswith("of"):
+                    return True
                 return False
 
             while j < len(visual_lines):
@@ -637,10 +641,14 @@ def extract_pdf_structured(pdf_path):
         logical_rows.append((level, bold, name_text, perm_text))
         i = j if j > i + 1 else i + 1
 
-    # Post-process: merge single-word "suffix" rows into the previous row.
-    # These are short field names (1 word) at the same level with no permissions
-    # that follow a row WITH permissions — they're truncated continuations of
-    # the previous field name (e.g., "ARG - Continued Sickness Pay" + "Period").
+    # Post-process: merge continuation rows into the previous row.
+    # Case 1: Short field names (≤2 words) with no perms after a row WITH perms
+    #   e.g., "ARG - Continued Sickness Pay" + "Period"
+    # Case 2: Field rows with no perms whose previous row also has no perms
+    #   e.g., "INVOL - Antecipation End of" + "Contract - Company (TER_BRA_BH)"
+    #   These chain together and eventually the next row with perms gets them.
+    # Case 3: Field rows with no perms where the previous row's name ends with
+    #   a hyphen/dash — indicates a wrapped name regardless of word count.
     merged_rows = []
     for row in logical_rows:
         level, bold, name, perms = row
@@ -648,14 +656,14 @@ def extract_pdf_structured(pdf_path):
                 and not perms
                 and not bold
                 and level == "field"
-                and len(name.split()) <= 2
-                and merged_rows[-1][3]  # previous row has perms
                 and merged_rows[-1][0] == level  # same level
                 and not merged_rows[-1][1]):  # previous not bold
             prev = merged_rows[-1]
-            merged_rows[-1] = (prev[0], prev[1], prev[2] + " " + name, prev[3])
-        else:
-            merged_rows.append(row)
+            # A no-perms, non-bold field row is always a continuation of the
+            # previous field row (wrapped long name in PDF)
+            merged_rows[-1] = (prev[0], prev[1], prev[2] + " " + name, prev[3] or perms)
+            continue
+        merged_rows.append(row)
     logical_rows = merged_rows
 
     # Third pass: build hierarchical entries from logical rows
