@@ -75,6 +75,10 @@
     padding: 24px;
     margin-bottom: 24px;
   }
+  .tool-panel.expanded.settled {
+    max-height: none;
+    overflow-y: auto;
+  }
   .tool-panel-header {
     display: flex;
     align-items: center;
@@ -329,7 +333,7 @@ function toggleSection(name) {
   }
 
   // Collapse all panels first
-  panels.forEach(function(p) { p.classList.remove('expanded'); });
+  panels.forEach(function(p) { p.classList.remove('settled', 'expanded'); });
 
   // Hide cards with animation
   cardsContainer.classList.add('hidden');
@@ -341,13 +345,14 @@ function toggleSection(name) {
     panel.classList.add('expanded');
     currentSection = name;
     setTimeout(function() {
+      panel.classList.add('settled');
       panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }, 100);
+    }, 450);
   }
 }
 
 function collapseAll() {
-  document.querySelectorAll('.tool-panel').forEach(function(p) { p.classList.remove('expanded'); });
+  document.querySelectorAll('.tool-panel').forEach(function(p) { p.classList.remove('settled', 'expanded'); });
   document.getElementById('toolCards').classList.remove('hidden');
   currentSection = null;
   resetAllSections();
