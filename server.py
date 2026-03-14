@@ -45,6 +45,17 @@ app.add_middleware(
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
 
 
+def _find_role_column(ws, role_name):
+    """Scan header rows (1-3) of a worksheet for a column matching role_name."""
+    role_name_norm = role_name.lower().strip()
+    for header_row in range(1, 4):
+        for col in range(1, ws.max_column + 1):
+            cell_val = ws.cell(row=header_row, column=col).value
+            if cell_val and role_name_norm in str(cell_val).lower().strip():
+                return col
+    return None
+
+
 @app.get("/")
 async def serve_frontend():
     """Serve the frontend single-page application."""
@@ -174,17 +185,15 @@ async def compare_pdf_excel(pdf: UploadFile = File(...), excel: UploadFile = Fil
             )
 
         ws = wb[EXCEL_SHEET]
-        # Scan header rows (rows 1-3) to find the role column
-        role_col = None
-        role_name_norm = role_name.lower().strip()
-        for header_row in range(1, 4):
-            for col in range(1, ws.max_column + 1):
-                cell_val = ws.cell(row=header_row, column=col).value
-                if cell_val and role_name_norm in str(cell_val).lower().strip():
-                    role_col = col
-                    break
-            if role_col:
-                break
+        role_col = _find_role_column(ws, role_name)
+
+        # If not found with data_only, try without (catches hyperlinked cells)
+        if role_col is None:
+            wb.close()
+            wb = openpyxl.load_workbook(excel_tmp.name, data_only=False)
+            ws = wb[EXCEL_SHEET]
+            role_col = _find_role_column(ws, role_name)
+
         wb.close()
 
         if role_col is None:
@@ -368,9 +377,9 @@ async def update_excel_from_pdf(
 
         EXCEL_SHEET = "ROLE ACCESS (WHAT)"
 
-        # Open Excel and find role column
+        # Open Excel — try data_only first (cached values), then without (formula text)
         try:
-            wb = openpyxl.load_workbook(excel_tmp.name)
+            wb = openpyxl.load_workbook(excel_tmp.name, data_only=True)
         except Exception as exc:
             raise HTTPException(status_code=422, detail=f"Excel open error: {exc}") from exc
 
@@ -382,23 +391,26 @@ async def update_excel_from_pdf(
             )
 
         ws = wb[EXCEL_SHEET]
-        role_col = None
-        role_name_norm = role_name.lower().strip()
-        for header_row in range(1, 4):
-            for col in range(1, ws.max_column + 1):
-                cell_val = ws.cell(row=header_row, column=col).value
-                if cell_val and role_name_norm in str(cell_val).lower().strip():
-                    role_col = col
-                    break
-            if role_col:
-                break
+        role_col = _find_role_column(ws, role_name)
 
+        # If not found with data_only, try without (catches formula/hyperlinked cells)
         if role_col is None:
             wb.close()
+            wb = openpyxl.load_workbook(excel_tmp.name, data_only=False)
+            ws = wb[EXCEL_SHEET]
+            role_col = _find_role_column(ws, role_name)
+
+        wb.close()
+
+        if role_col is None:
             raise HTTPException(
                 status_code=422,
                 detail=f"Role '{role_name}' not found in header rows of sheet '{EXCEL_SHEET}'.",
             )
+
+        # Re-open for writing (preserves formatting)
+        wb = openpyxl.load_workbook(excel_tmp.name)
+        ws = wb[EXCEL_SHEET]
 
         # Extract Excel permissions and compare
         excel_entries = extract_excel_permissions(excel_tmp.name, EXCEL_SHEET, role_col)

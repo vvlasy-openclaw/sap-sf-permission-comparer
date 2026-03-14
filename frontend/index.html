@@ -829,10 +829,13 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
     if (data.excelFieldNone && data.excelFieldNone.length) {
       html += '<div class="result-panel">' +
         '<div class="result-panel-header" style="background:#9b59b6;" onclick="togglePanel(this)">' +
-        'In PDF — Excel Field Exists but Value is None <span class="count-badge">' + data.excelFieldNone.length + '</span>' +
-        '<button onclick="event.stopPropagation(); updateExcelFromPdf();" style="float:right;margin:-4px 0;padding:4px 12px;border:none;border-radius:4px;background:#fff;color:#9b59b6;font-weight:bold;cursor:pointer;font-size:13px;">Update Excel &amp; Download</button>' +
+        'In PDF — Excel Field Exists but Value is None <span class="count-badge">' + data.excelFieldNone.length + '</span></div>' +
+        '<div class="result-panel-body">' +
+        '<div style="padding:12px 14px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:12px;">' +
+        '<button id="updateFromPdfBtn" class="tool-btn" style="font-size:0.82em;padding:8px 18px;" onclick="updateExcelFromPdf()">Update Excel from PDF &amp; Download</button>' +
+        '<span id="updateFromPdfProgress" style="font-size:0.82em;"></span>' +
         '</div>' +
-        '<div class="result-panel-body"><table>' +
+        '<table>' +
         '<tr><th>#</th><th>Section</th><th>Subsection</th><th>Field</th><th>PDF Permissions</th></tr>';
       for (var i = 0; i < data.excelFieldNone.length; i++) {
         var entry = data.excelFieldNone[i];
@@ -927,12 +930,17 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
       alert('PDF and Excel files are no longer available. Please re-upload and compare again.');
       return;
     }
+
+    var btn = document.getElementById('updateFromPdfBtn');
+    var progress = document.getElementById('updateFromPdfProgress');
+    btn.disabled = true;
+    btn.style.opacity = '0.5';
+    btn.style.cursor = 'not-allowed';
+    progress.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;vertical-align:middle;display:inline-block;"></span> Updating Excel...';
+
     var formData = new FormData();
     formData.append('pdf', window._pxPdfFile);
     formData.append('excel', window._pxExcelFile);
-
-    var statusEl = document.getElementById('pxStatus');
-    statusEl.innerHTML = '<span class="spinner"></span> Updating Excel with PDF values...';
 
     fetch('/api/update-excel-from-pdf', { method: 'POST', body: formData })
       .then(function(r) {
@@ -943,7 +951,10 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
         return r.blob().then(function(blob) { return { blob: blob, filename: filename }; });
       })
       .then(function(result) {
-        statusEl.innerHTML = 'Updated Excel ready for download.';
+        progress.innerHTML = '<span style="color:#27ae60;">&#10003; Done</span>';
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
         var url = URL.createObjectURL(result.blob);
         var a = document.createElement('a');
         a.href = url;
@@ -951,10 +962,13 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
         document.body.appendChild(a);
         a.click();
         setTimeout(function() { URL.revokeObjectURL(url); a.remove(); }, 2000);
-        setTimeout(function() { statusEl.innerHTML = ''; }, 4000);
+        setTimeout(function() { progress.innerHTML = ''; }, 3000);
       })
       .catch(function(err) {
-        statusEl.innerHTML = '<span style="color:#e74c3c;"><strong>Error:</strong> ' + htmlEscape(err.message) + '</span>';
+        progress.innerHTML = '<span style="color:#e74c3c;">&#10007; ' + htmlEscape(err.message) + '</span>';
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
       });
   };
 
