@@ -740,8 +740,8 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
     document.getElementById('pxCompareBtn').disabled = !(pxPdfFile && pxExcelFile);
   }
 
-  setupUploadBox('pxPdfBox', 'pxPdfInput', 'pxPdfName', function(f) { pxPdfFile = f; pxUpdateBtn(); });
-  setupUploadBox('pxExcelBox', 'pxExcelInput', 'pxExcelName', function(f) { pxExcelFile = f; pxUpdateBtn(); });
+  setupUploadBox('pxPdfBox', 'pxPdfInput', 'pxPdfName', function(f) { pxPdfFile = f; window._pxPdfFile = f; pxUpdateBtn(); });
+  setupUploadBox('pxExcelBox', 'pxExcelInput', 'pxExcelName', function(f) { pxExcelFile = f; window._pxExcelFile = f; pxUpdateBtn(); });
 
   window.runPdfExcelCompare = function() {
     var btn = document.getElementById('pxCompareBtn');
@@ -823,7 +823,22 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
 
     // Excel field = None panel
     if (data.excelFieldNone && data.excelFieldNone.length) {
-      html += renderPdfEntryPanel(data.excelFieldNone, 'In PDF — Excel Field Exists but Value is None', '#9b59b6', 'tag-pdf');
+      html += '<div class="result-panel">' +
+        '<div class="result-panel-header" style="background:#9b59b6;" onclick="togglePanel(this)">' +
+        'In PDF — Excel Field Exists but Value is None <span class="count-badge">' + data.excelFieldNone.length + '</span>' +
+        '<button onclick="event.stopPropagation(); updateExcelFromPdf();" style="float:right;margin:-4px 0;padding:4px 12px;border:none;border-radius:4px;background:#fff;color:#9b59b6;font-weight:bold;cursor:pointer;font-size:13px;">Update Excel &amp; Download</button>' +
+        '</div>' +
+        '<div class="result-panel-body"><table>' +
+        '<tr><th>#</th><th>Section</th><th>Subsection</th><th>Field</th><th>PDF Permissions</th></tr>';
+      for (var i = 0; i < data.excelFieldNone.length; i++) {
+        var entry = data.excelFieldNone[i];
+        html += '<tr><td>' + (i+1) + '</td>' +
+          '<td>' + htmlEscape(entry.section) + '</td>' +
+          '<td>' + htmlEscape(entry.subsection) + '</td>' +
+          '<td>' + htmlEscape(entry.field) + '</td>' +
+          '<td><span class="tag tag-pdf">' + htmlEscape(entry.permissions) + '</span></td></tr>';
+      }
+      html += '</table></div></div>';
     }
 
     // Only in Excel panel
@@ -902,6 +917,42 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
   }
 
   function attachPanelToggle(container) { /* toggle is global */ }
+
+  window.updateExcelFromPdf = function() {
+    if (!window._pxPdfFile || !window._pxExcelFile) {
+      alert('PDF and Excel files are no longer available. Please re-upload and compare again.');
+      return;
+    }
+    var formData = new FormData();
+    formData.append('pdf', window._pxPdfFile);
+    formData.append('excel', window._pxExcelFile);
+
+    var statusEl = document.getElementById('pxStatus');
+    statusEl.innerHTML = '<span class="spinner"></span> Updating Excel with PDF values...';
+
+    fetch('/api/update-excel-from-pdf', { method: 'POST', body: formData })
+      .then(function(r) {
+        if (!r.ok) return r.text().then(function(t) { throw new Error('Server error (' + r.status + '): ' + t); });
+        var disposition = r.headers.get('Content-Disposition') || '';
+        var fnMatch = disposition.match(/filename="?([^"]+)"?/);
+        var filename = fnMatch ? fnMatch[1] : 'updated_workbook.xlsx';
+        return r.blob().then(function(blob) { return { blob: blob, filename: filename }; });
+      })
+      .then(function(result) {
+        statusEl.innerHTML = 'Updated Excel ready for download.';
+        var url = URL.createObjectURL(result.blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = result.filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function() { URL.revokeObjectURL(url); a.remove(); }, 2000);
+        setTimeout(function() { statusEl.innerHTML = ''; }, 4000);
+      })
+      .catch(function(err) {
+        statusEl.innerHTML = '<span style="color:#e74c3c;"><strong>Error:</strong> ' + htmlEscape(err.message) + '</span>';
+      });
+  };
 
   window.togglePanel = function(header) {
     var panel = header.closest('.result-panel');

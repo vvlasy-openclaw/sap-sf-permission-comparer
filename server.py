@@ -326,6 +326,128 @@ async def modify_excel(
             os.unlink(excel_tmp.name)
 
 
+@app.post("/api/update-excel-from-pdf")
+async def update_excel_from_pdf(
+    pdf: UploadFile = File(...),
+    excel: UploadFile = File(...),
+):
+    """
+    Accept a PDF + Excel, find Excel cells where the field exists but value is
+    None, update those cells with the PDF permission values, and return the
+    modified Excel file for download.
+    """
+    pdf_tmp = None
+    excel_tmp = None
+    try:
+        pdf_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        pdf_tmp.write(await pdf.read())
+        pdf_tmp.close()
+
+        excel_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+        excel_tmp.write(await excel.read())
+        excel_tmp.close()
+
+        # Extract PDF permissions
+        try:
+            pdf_entries = extract_pdf_permissions(pdf_tmp.name)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"PDF parsing error: {exc}") from exc
+
+        if not pdf_entries:
+            raise HTTPException(status_code=422, detail="No permission entries found in PDF.")
+
+        # Detect role name from PDF filename
+        pdf_basename = os.path.splitext(pdf.filename or "")[0]
+        role_name = None
+        import re as _re
+        m = _re.search(r'View Role for\s+(.+)', pdf_basename, _re.IGNORECASE)
+        if m:
+            role_name = m.group(1).strip()
+        if not role_name:
+            role_name = pdf_basename.strip()
+
+        EXCEL_SHEET = "ROLE ACCESS (WHAT)"
+
+        # Open Excel and find role column
+        try:
+            wb = openpyxl.load_workbook(excel_tmp.name)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Excel open error: {exc}") from exc
+
+        if EXCEL_SHEET not in wb.sheetnames:
+            wb.close()
+            raise HTTPException(
+                status_code=422,
+                detail=f"Sheet '{EXCEL_SHEET}' not found in Excel workbook.",
+            )
+
+        ws = wb[EXCEL_SHEET]
+        role_col = None
+        role_name_norm = role_name.lower().strip()
+        for header_row in range(1, 4):
+            for col in range(1, ws.max_column + 1):
+                cell_val = ws.cell(row=header_row, column=col).value
+                if cell_val and role_name_norm in str(cell_val).lower().strip():
+                    role_col = col
+                    break
+            if role_col:
+                break
+
+        if role_col is None:
+            wb.close()
+            raise HTTPException(
+                status_code=422,
+                detail=f"Role '{role_name}' not found in header rows of sheet '{EXCEL_SHEET}'.",
+            )
+
+        # Extract Excel permissions and compare
+        excel_entries = extract_excel_permissions(excel_tmp.name, EXCEL_SHEET, role_col)
+        missing_in_excel, _, _, _ = compare_pdf_vs_excel(pdf_entries, excel_entries)
+
+        has_field_none = [e for e in missing_in_excel if e.get("_excel_has_field")]
+
+        if not has_field_none:
+            wb.close()
+            raise HTTPException(
+                status_code=422,
+                detail="No 'Excel field = None' entries found to update.",
+            )
+
+        # Update the Excel cells
+        updated_count = 0
+        for entry in has_field_none:
+            row = entry.get("_excel_row")
+            pdf_value = entry.get("permissions_str", "")
+            if row and pdf_value:
+                ws.cell(row=row, column=role_col).value = pdf_value
+                updated_count += 1
+
+        # Save modified workbook
+        out_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+        out_tmp.close()
+        wb.save(out_tmp.name)
+        wb.close()
+
+        with open(out_tmp.name, "rb") as fh:
+            xlsx_bytes = fh.read()
+        os.unlink(out_tmp.name)
+
+        excel_basename = os.path.splitext(excel.filename or "workbook")[0]
+        download_name = f"{excel_basename}_updated.xlsx"
+
+        return StreamingResponse(
+            io.BytesIO(xlsx_bytes),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{download_name}"'},
+        )
+
+    finally:
+        if pdf_tmp and os.path.exists(pdf_tmp.name):
+            os.unlink(pdf_tmp.name)
+        if excel_tmp and os.path.exists(excel_tmp.name):
+            os.unlink(excel_tmp.name)
+
+
 @app.post("/api/pdf-to-excel")
 async def pdf_to_excel(pdf: UploadFile = File(...)):
     """
