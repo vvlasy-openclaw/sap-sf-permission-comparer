@@ -277,7 +277,7 @@
         <input type="file" id="pxExcelInput" accept=".xlsx,.xls">
       </div>
     </div>
-    <div class="actions">
+    <div class="actions" id="pxActionsContainer">
       <button class="tool-btn orange" id="pxCompareBtn" disabled onclick="runPdfExcelCompare()">Compare PDF vs Excel</button>
     </div>
     <div class="tool-status" id="pxStatus"></div>
@@ -303,7 +303,7 @@
         <input type="file" id="genPdfInput" accept=".pdf">
       </div>
     </div>
-    <div class="actions">
+    <div class="actions" id="genActionsContainer">
       <button class="tool-btn green" id="genExcelBtn" disabled onclick="runGenExcel()">Generate &amp; Download Excel</button>
     </div>
     <div class="tool-status" id="genStatus"></div>
@@ -371,6 +371,8 @@ function resetAllSections() {
   document.getElementById('resetBtn').style.display = 'none';
 
   // Reset section 2 (PDF vs Excel)
+  document.getElementById('pxUploadContainer').style.display = '';
+  document.getElementById('pxActionsContainer').style.display = '';
   document.getElementById('pxPdfInput').value = '';
   document.getElementById('pxExcelInput').value = '';
   document.getElementById('pxPdfName').textContent = '';
@@ -383,6 +385,8 @@ function resetAllSections() {
   if (window._resetPxFiles) window._resetPxFiles();
 
   // Reset section 3 (Generate Excel)
+  document.getElementById('genUploadContainer').style.display = '';
+  document.getElementById('genActionsContainer').style.display = '';
   document.getElementById('genPdfInput').value = '';
   document.getElementById('genPdfName').textContent = '';
   document.getElementById('genPdfBox').classList.remove('has-file');
@@ -705,20 +709,16 @@ function clearFilter() {
 }
 
 function resetUI() {
+  // Restore all upload containers and action buttons
   document.getElementById('uploadContainer').style.display = '';
   document.getElementById('actionsContainer').style.display = '';
-  document.getElementById('resetBtn').style.display = 'none';
-  document.getElementById('toolCards').style.display = '';
-  document.getElementById('report').innerHTML = '';
-  t3File = null;
-  prodFile = null;
-  document.getElementById('t3Input').value = '';
-  document.getElementById('prodInput').value = '';
-  document.getElementById('t3Name').textContent = '';
-  document.getElementById('prodName').textContent = '';
-  document.getElementById('t3Box').classList.remove('has-file');
-  document.getElementById('prodBox').classList.remove('has-file');
-  document.getElementById('compareBtn').disabled = true;
+  document.getElementById('pxUploadContainer').style.display = '';
+  document.getElementById('pxActionsContainer').style.display = '';
+  document.getElementById('genUploadContainer').style.display = '';
+  document.getElementById('genActionsContainer').style.display = '';
+
+  // Collapse all panels and show tool cards
+  collapseAll();
 }
 
 // Load build info
@@ -766,6 +766,10 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
         pxLastData = data;
         reportEl.innerHTML = renderPdfExcelReport(data);
         attachPanelToggle(reportEl);
+        // Hide upload UI, show reset
+        document.getElementById('pxUploadContainer').style.display = 'none';
+        document.getElementById('pxActionsContainer').style.display = 'none';
+        document.getElementById('resetBtn').style.display = '';
       })
       .catch(function(err) {
         statusEl.innerHTML = '';
@@ -1041,6 +1045,10 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
       })
       .then(function(result) {
         statusEl.innerHTML = 'Download ready.';
+        // Hide upload UI, show reset
+        document.getElementById('genUploadContainer').style.display = 'none';
+        document.getElementById('genActionsContainer').style.display = 'none';
+        document.getElementById('resetBtn').style.display = '';
         // Trigger download
         var url = URL.createObjectURL(result.blob);
         var a = document.createElement('a');
