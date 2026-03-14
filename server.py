@@ -430,8 +430,8 @@ async def update_excel_from_pdf(
         for entry in has_field_none:
             row = entry.get("_excel_row")
             pdf_value = entry.get("permissions_str", "")
-            if row and pdf_value:
-                ws.cell(row=row, column=role_col).value = pdf_value
+            if row:
+                ws.cell(row=row, column=role_col).value = pdf_value if pdf_value else "None"
                 updated_count += 1
 
         # Save modified workbook
