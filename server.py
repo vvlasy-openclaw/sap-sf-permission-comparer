@@ -384,6 +384,15 @@ async def update_excel_from_pdf(
             if row:
                 ws.cell(row=int(row), column=role_column).value = value or "None"
 
+        # Sweep: fill any remaining empty cells in the role column with "None"
+        for row_idx in range(4, ws.max_row + 1):
+            cell = ws.cell(row=row_idx, column=role_column)
+            perm_cell = ws.cell(row=row_idx, column=5)
+            # Only fill cells in rows that have a permission name (column 5)
+            if perm_cell.value and str(perm_cell.value).strip():
+                if cell.value is None or (isinstance(cell.value, str) and not cell.value.strip()):
+                    cell.value = "None"
+
         out = io.BytesIO()
         wb.save(out)
         wb.close()
