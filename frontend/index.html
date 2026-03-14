@@ -931,10 +931,16 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
   function attachPanelToggle(container) { /* toggle is global */ }
 
   window.updateExcelFromPdf = function() {
-    if (!window._pxPdfFile || !window._pxExcelFile) {
-      alert('PDF and Excel files are no longer available. Please re-upload and compare again.');
+    if (!pxLastData || !pxExcelFile) {
+      alert('Comparison data is no longer available. Please re-upload and compare again.');
       return;
     }
+
+    var updates = pxLastData.excelFieldNone.map(function(e) {
+      return { row: e.excelRow, value: e.permissions || 'None' };
+    }).filter(function(u) { return u.row; });
+
+    if (!updates.length) { alert('No rows to update.'); return; }
 
     var btn = document.getElementById('updateFromPdfBtn');
     var progress = document.getElementById('updateFromPdfProgress');
@@ -944,8 +950,9 @@ fetch('/api/info').then(function(r) { return r.json(); }).then(function(d) {
     progress.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;vertical-align:middle;display:inline-block;"></span> Updating Excel...';
 
     var formData = new FormData();
-    formData.append('pdf', window._pxPdfFile);
-    formData.append('excel', window._pxExcelFile);
+    formData.append('excel', pxExcelFile);
+    formData.append('updates', JSON.stringify(updates));
+    formData.append('role_column', pxLastData.roleColumn);
 
     fetch('/api/update-excel-from-pdf', { method: 'POST', body: formData })
       .then(function(r) {

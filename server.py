@@ -337,52 +337,38 @@ async def modify_excel(
 
 @app.post("/api/update-excel-from-pdf")
 async def update_excel_from_pdf(
-    pdf: UploadFile = File(...),
     excel: UploadFile = File(...),
+    updates: str = Form(...),
+    role_column: int = Form(...),
 ):
     """
-    Accept a PDF + Excel, find Excel cells where the field exists but value is
-    None, update those cells with the PDF permission values, and return the
-    modified Excel file for download.
+    Accept an Excel workbook and a JSON-encoded list of {row, value} updates.
+    Write each value into the specified role column at the given row, and
+    return the modified Excel file for download.
+
+    This avoids re-parsing the PDF and re-running comparison (which caused OOM
+    due to multiple openpyxl loads).  The frontend already has the row/value
+    data from the initial comparison.
     """
-    pdf_tmp = None
+    import json as _json
+
+    try:
+        update_list = _json.loads(updates)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid updates JSON")
+
+    if not update_list:
+        raise HTTPException(status_code=400, detail="No updates provided")
+
     excel_tmp = None
     try:
-        pdf_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        pdf_tmp.write(await pdf.read())
-        pdf_tmp.close()
-
         excel_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
         excel_tmp.write(await excel.read())
         excel_tmp.close()
 
-        # Extract PDF permissions
-        try:
-            pdf_entries = extract_pdf_permissions(pdf_tmp.name)
-        except Exception as exc:
-            raise HTTPException(status_code=422, detail=f"PDF parsing error: {exc}") from exc
-
-        if not pdf_entries:
-            raise HTTPException(status_code=422, detail="No permission entries found in PDF.")
-
-        # Detect role name from PDF filename
-        pdf_basename = os.path.splitext(pdf.filename or "")[0]
-        role_name = None
-        import re as _re
-        m = _re.search(r'View Role for\s+(.+)', pdf_basename, _re.IGNORECASE)
-        if m:
-            role_name = m.group(1).strip()
-        if not role_name:
-            role_name = pdf_basename.strip()
-
         EXCEL_SHEET = "ROLE ACCESS (WHAT)"
 
-        # Open Excel — try data_only first (cached values), then without (formula text)
-        try:
-            wb = openpyxl.load_workbook(excel_tmp.name, data_only=True)
-        except Exception as exc:
-            raise HTTPException(status_code=422, detail=f"Excel open error: {exc}") from exc
-
+        wb = openpyxl.load_workbook(excel_tmp.name)
         if EXCEL_SHEET not in wb.sheetnames:
             wb.close()
             raise HTTPException(
@@ -391,71 +377,28 @@ async def update_excel_from_pdf(
             )
 
         ws = wb[EXCEL_SHEET]
-        role_col = _find_role_column(ws, role_name)
 
-        # If not found with data_only, try without (catches formula/hyperlinked cells)
-        if role_col is None:
-            wb.close()
-            wb = openpyxl.load_workbook(excel_tmp.name, data_only=False)
-            ws = wb[EXCEL_SHEET]
-            role_col = _find_role_column(ws, role_name)
-
-        wb.close()
-
-        if role_col is None:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Role '{role_name}' not found in header rows of sheet '{EXCEL_SHEET}'.",
-            )
-
-        # Re-open for writing (preserves formatting)
-        wb = openpyxl.load_workbook(excel_tmp.name)
-        ws = wb[EXCEL_SHEET]
-
-        # Extract Excel permissions and compare
-        excel_entries = extract_excel_permissions(excel_tmp.name, EXCEL_SHEET, role_col)
-        missing_in_excel, _, _, _ = compare_pdf_vs_excel(pdf_entries, excel_entries)
-
-        has_field_none = [e for e in missing_in_excel if e.get("_excel_has_field")]
-
-        if not has_field_none:
-            wb.close()
-            raise HTTPException(
-                status_code=422,
-                detail="No 'Excel field = None' entries found to update.",
-            )
-
-        # Update the Excel cells
-        updated_count = 0
-        for entry in has_field_none:
-            row = entry.get("_excel_row")
-            pdf_value = entry.get("permissions_str", "")
+        for item in update_list:
+            row = item.get("row")
+            value = item.get("value", "None")
             if row:
-                ws.cell(row=row, column=role_col).value = pdf_value if pdf_value else "None"
-                updated_count += 1
+                ws.cell(row=int(row), column=role_column).value = value or "None"
 
-        # Save modified workbook
-        out_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-        out_tmp.close()
-        wb.save(out_tmp.name)
+        out = io.BytesIO()
+        wb.save(out)
         wb.close()
-
-        with open(out_tmp.name, "rb") as fh:
-            xlsx_bytes = fh.read()
-        os.unlink(out_tmp.name)
+        out.seek(0)
 
         excel_basename = os.path.splitext(excel.filename or "workbook")[0]
         download_name = f"{excel_basename}_updated.xlsx"
 
         return StreamingResponse(
-            io.BytesIO(xlsx_bytes),
+            out,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f'attachment; filename="{download_name}"'},
         )
 
     finally:
-        if pdf_tmp and os.path.exists(pdf_tmp.name):
-            os.unlink(pdf_tmp.name)
         if excel_tmp and os.path.exists(excel_tmp.name):
             os.unlink(excel_tmp.name)
 
